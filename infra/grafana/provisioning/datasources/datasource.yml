@@ -1,0 +1,12 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: Prometheus
+    type: prometheus
+    access: proxy
+    # Dev: prometheus runs with network_mode: host next to grafana.
+    # Prod (k3s): replace with http://prometheus:9090 (in-cluster DNS).
+    url: http://localhost:9090
+    isDefault: true
+    editable: true

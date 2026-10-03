@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api import routes
+from app.core import metrics
 from app.core.jobs import init_db
 from app.core.registry import load_registry
 
@@ -14,6 +15,7 @@ async def lifespan(app: FastAPI):
     invalid = [k for k, v in registry.items() if not v["valid"]]
     if invalid:
         raise RuntimeError(f"invalid workflows in registry: {invalid}")
+    metrics.start_poller()
     yield
     routes.publisher.close()
 

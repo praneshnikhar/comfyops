@@ -5,4 +5,4 @@ minio
 redis
 numpy
 pydantic
-pydantic-settings
+pydantic-settingsprometheus-client

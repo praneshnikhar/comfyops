@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     # Dev defaults target localhost Docker services; the Asus k3s cluster
     # overrides these via env vars (COMFYOPS_*) in production.
     rabbitmq_url: str = "amqp://guest:guest@127.0.0.1:5672/"
+    rabbitmq_mgmt_url: str = "http://guest:guest@127.0.0.1:15672/"
     minio_endpoint: str = "127.0.0.1:9000"
     minio_access_key: str = "comfyops"
     minio_secret_key: str = "comfyops"

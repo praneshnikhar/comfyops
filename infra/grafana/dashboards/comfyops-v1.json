@@ -1,0 +1,155 @@
+{
+  "uid": "comfyops-v1",
+  "title": "ComfyOps v1 — Queue & Generation",
+  "tags": ["comfyops"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Queue depth (RabbitMQ)",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 6, "w": 4, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "comfyops_rabbitmq_queue_depth",
+          "legendFormat": "messages"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 3 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Queue depth over time",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 4, "y": 0 },
+      "targets": [
+        {
+          "expr": "comfyops_rabbitmq_queue_depth",
+          "legendFormat": "messages"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Job latency (enqueue → complete), p50 / p95",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(comfyops_job_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(comfyops_job_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Generation time (ComfyUI), p50 / p95",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(comfyops_generation_time_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(comfyops_generation_time_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Job throughput (per 5m)",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 14 },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(comfyops_jobs_total[5m]))",
+          "legendFormat": "{{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ops" }
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Jobs total (lifetime)",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 14 },
+      "targets": [
+        {
+          "expr": "sum(comfyops_jobs_total)",
+          "legendFormat": "jobs"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Failures (lifetime)",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 14 },
+      "targets": [
+        {
+          "expr": "sum(comfyops_jobs_total{status=~\"failed\"})",
+          "legendFormat": "failed"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

@@ -153,10 +153,8 @@ cd ~/coding2/final-year-project/scoring && .venv/bin/python gate.py txt2img-sd15
 
 1. **Argo CD (GitOps)** — install on k3s, point at comfyops repo, auto-deploy
    `infra/k3s/` manifests. 20-30 min.
-2. **Grafana v1 dashboards** — job latency, queue depth, generation time.
-   Add a Prometheus `/metrics` endpoint to gateway + worker (prometheus_client),
-   run Prometheus+Grafana in the cluster, build the dashboard. (Local dev
-   equivalent was not built either.)
+2. **Grafana v1 dashboards — DONE (2026-10-03, dev compose on Asus)** —
+   see §10.
 3. **Prod 20-prompt suite** — set `scoring/gate_config.py` PROMPTS to ~20 when
    the Asus does the scoring (CPU is fine).
 
@@ -218,6 +216,34 @@ COMFYOPS_GATEWAY=http://192.168.1.50:31000 .venv/bin/python worker.py
 **Network notes:** Mac pulls jobs (outbound only — no inbound ports needed on the Mac).
 Ports the Asus must listen on: 5672 (AMQP), 9000 (S3), 31000 (gateway NodePort),
 31567 (RabbitMQ mgmt), 5000 (MLflow), 3000 (Grafana, later).
+
+---
+
+## 10. M2 leftover done: Grafana v1 observability (dev compose, on Asus 2026-10-03)
+
+- **Gateway `/metrics`** (`prometheus_client` in `gateway/app/core/metrics.py`):
+  `comfyops_jobs_total{status}`, `comfyops_job_latency_seconds` (hist, enqueue→complete),
+  `comfyops_generation_time_seconds` (hist, worker-reported), `comfyops_rabbitmq_queue_depth`
+  (gauge, polled from RabbitMQ mgmt API by a background thread).
+- **Worker**: same histogram + `comfyops_worker_jobs_total`, metrics on `:9100`
+  (`COMFYOPS_WORKER_METRICS_PORT`); `complete_job` now POSTs a JSON body
+  `{image_url, generation_time}` (query-param form still accepted).
+- **Stack**: `infra/prometheus/prometheus.yml`, `infra/grafana/provisioning/`
+  (datasource `uid: Prometheus` + dashboard provider), dashboard
+  `infra/grafana/dashboards/comfyops-v1.json` (7 panels: queue depth stat+series,
+  job latency p50/p95, generation time p50/p95, throughput, jobs total, failures).
+  Grafana admin `admin`/`comfyops`, http://localhost:3000, Prometheus :9090.
+- **Asus quirk (IMPORTANT)**: a host firewall drops docker-bridge → host traffic,
+  so Prometheus/Grafana run with `network_mode: host` in dev compose and scrape
+  `127.0.0.1`. On Mac Docker Desktop this also works (published ports reach macOS
+  loopback), but if not, revert to `ports:` + `extra_hosts: host-gateway` +
+  `host.docker.internal` targets.
+- **Python 3.14 quirk**: `urllib` rejects userinfo-in-URL (`http://user:pass@host`)
+  — always strip auth into an `Authorization: Basic` header (see `_mgmt_url`/`_mgmt_headers`
+  in `metrics.py`). gateway/worker requirements now include `prometheus-client`.
+- **Ops gotchas**: killing uvicorn with `pkill -f "uvicorn app.main"` also kills the
+  invoking shell (pattern matches its own cmdline) — use `pkill -f "uvicorn app[.]main"`.
+  Start gateway detached with plain `nohup ... &` (`setsid` hangs the shell tool).
 
 ---
 

@@ -3,8 +3,9 @@ import time
 
 from fastapi import APIRouter, HTTPException, Response
 from minio import Minio
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
-from app.core import jobs, registry
+from app.core import jobs, metrics, registry
 from app.core.config import settings
 from app.core.rabbit import JobPublisher
 from app.models.schemas import GenerateRequest, GenerateResponse, JobStatusResponse
@@ -34,6 +35,12 @@ def get_image(job_id: str, filename: str):
 @router.get("/health")
 def health():
     return {"status": "ok", "service": "comfyops-gateway"}
+
+
+@router.get("/metrics")
+def metrics_endpoint():
+    """Prometheus scrape target."""
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @router.get("/workflows")
@@ -71,6 +78,7 @@ def generate(req: GenerateRequest):
             "workflow_json": workflow_json,
         }
     )
+    metrics.record_job("queued")
     return GenerateResponse(job_id=job["id"], status="queued")
 
 
@@ -83,9 +91,25 @@ def job_status(job_id: str):
 
 
 @router.post("/jobs/{job_id}/complete")
-def job_complete(job_id: str, image_url: str):
-    """Called by the worker (or a webhook) when images are in MinIO."""
-    if not jobs.get_job(job_id):
+def job_complete(
+    job_id: str,
+    image_url: str | None = None,
+    generation_time: float | None = None,
+    body: dict | None = None,
+):
+    """Called by the worker (or a webhook) when images are in object storage.
+
+    Accepts query params (worker) or a JSON body {image_url, generation_time}.
+    """
+    if body is not None:
+        image_url = image_url or body.get("image_url")
+        generation_time = generation_time if generation_time is not None else body.get("generation_time")
+    if not image_url:
+        raise HTTPException(400, "image_url required")
+    job = jobs.get_job(job_id)
+    if not job:
         raise HTTPException(404, "job not found")
     jobs.mark_done(job_id, image_url)
+    metrics.record_job("done")
+    metrics.record_completion(job["created_at"], generation_time)
     return {"status": "ok"}
