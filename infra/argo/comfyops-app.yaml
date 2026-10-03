@@ -1,0 +1,23 @@
+# Argo CD Application — GitOps deploy of the ComfyOps platform (M2 leftover).
+# After installing Argo CD, this makes the cluster reconcile infra/k3s/
+# straight from git. Apply with kubectl once (see scripts/setup-prod.sh).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: comfyops
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/praneshnikhar/comfyops.git
+    targetRevision: main
+    path: infra/k3s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: comfyops
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

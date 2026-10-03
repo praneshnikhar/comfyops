@@ -23,6 +23,8 @@ spec:
           env:
             - name: COMFYOPS_RABBITMQ_URL
               value: amqp://guest:guest@rabbitmq:5672/
+            - name: COMFYOPS_RABBITMQ_MGMT_URL
+              value: http://guest:guest@rabbitmq:15672/
             - name: COMFYOPS_MINIO_ENDPOINT
               value: seaweedfs:9000
             - name: COMFYOPS_REDIS_URL

@@ -247,6 +247,74 @@ Ports the Asus must listen on: 5672 (AMQP), 9000 (S3), 31000 (gateway NodePort),
 
 ---
 
+## 11. M3 + M4 + M5 DONE (Asus session, 2026-10-03) — viva evidence available
+
+### M3 — statistical rigor ✅
+- `scoring/gate_config.py`: 20 prompts × 5 seeds; per-metric rules (clip/aesthetic
+  tolerance, defect-rate +0.05 max, gen-time/cost +25% max); cost model
+  `COST_PER_SECOND`; bootstrap settings.
+- `scoring/gate.py` v2: batch enqueue → poll → score; `paired_bootstrap_ci`
+  (pure Python, 2000 iters); BLOCK when CI95 entirely < 0 or beyond tolerance;
+  `--seed-champion` / `--promote` (promotion also calls the gateway promote API);
+  pushes `comfyops_gate_metric{workflow,version,metric}` + `comfyops_gate_verdict`
+  to pushgateway (:9091) for dashboards v2; per-image rows stored in champion
+  state for proper paired bootstrap. **Measured: champion seeded; challenger
+  1.1.0 BLOCKED (aesthetic CI95 all < 0, matching real M2 numbers).**
+- **Gateway promotion + canary** (`app/core/promotion.py`): `POST /workflows/{name}/promote`
+  (unversioned /generate then defaults to the promoted version, NOT the newest
+  file), `POST|GET|DELETE /workflows/{name}/canary` (weight 0..1 traffic split).
+  Verified: 50% canary → exactly 5/5 split; promote → default routes to 1.0.0.
+- `infra/grafana/dashboards/comfyops-v2.json` — quality trends (clip/aesthetic/
+  defect/gen-time/cost per version + verdict stats).
+- Mock modes for no-GPU machines: `COMFYOPS_MOCK_SCORE=1` (deterministic
+  synthetic scores, noise keyed on prompt ONLY so identical versions compare
+  equal), `COMFYOPS_MOCK_WORKER=1` (placeholder PNG, no ComfyUI). The full
+  gateway→queue→worker→S3→gate pipeline runs on a model-less box.
+
+### M4 — blame analysis + breakage discovery ✅ (novel core)
+- `scoring/blame.py`: node-level `diff_workflows` (class_type + input changes),
+  `revert_node` (reverts changed node + any changed nodes it references),
+  ablation runs via gateway `workflow_json` override (new `POST /generate` field),
+  verdict = recovering the *failing metrics* (CI95 upper ≥ 0 vs champion).
+  **Measured: 1.1.0 BLOCKed → ablation of KSampler (steps 20→8, euler→heun)
+  recovers → "3 | KSampler | inputs | -0.0010 | +0.2200 | BLAMED".** Report →
+  `.gate_state/blame-*.json` + MLflow experiment `blame`.
+- `scoring/discovery.py`: CLIP text embeddings (pseudo-embeddings in mock),
+  KMeans clustering, per-cluster paired bootstrap new-vs-champion, mutations of
+  failing cluster representatives, merged into `scoring/adversarial_prompts.txt`
+  which `gate.py` loads into every run. **Measured: 27 adversarial prompts
+  discovered from 3 failing clusters; next gate run includes them.**
+- Gateway: `GenerateRequest.workflow_json` — ad-hoc graphs for ablation/experiments.
+
+### M5 — semantic prompt caching + load tests ✅
+- `gateway/app/core/cache.py`: open_clip ViT-B-32 text embeddings (lazy; shared
+  repo-level `.model_cache/`, see note below), entries in Valkey keyed
+  `comfyops:cache:v<version>`, cosine lookup, `SIM_THRESHOLD=0.92` (calibrated on
+  real embeddings: paraphrase hits ≥0.94, near-misses ~0.88, unrelated ≤0.78),
+  TTL 86400, audit sampling 5% (`comfyops:cache:audit`), `invalidate()` on
+  promote (wipes other versions' entries — verified).
+  **Measured: "a red apple" miss → "an apple that is red" HIT in 76ms; unrelated
+  prompt misses.**
+- `loadtest/locustfile.py` + locust: **570 requests / 0 failures / 13 rps,
+  /generate p95 180ms, /jobs p50 3ms** (headless run command in the file).
+- **Model cache moved to repo root** `.model_cache/` (shared by scoring + gateway
+  CLIP). Updated `scoring/app/clip_score.py`, `aesthetic_score.py` paths +
+  `.gitignore` (`scoring/.model_cache/` → `.model_cache/`). NEVER commit it.
+- **Gateway venv now has torch cpu + open_clip** (needed for real embeddings;
+  ~700MB). `gateway/requirements.txt` is the light prod set — if you want the
+  gateway container to serve real cache hits it needs torch/open_clip too (for
+  now prod cache defaults to pseudo-embeddings unless installed).
+
+### Asus prod prep (partially done — k3s install is YOUR sudo action)
+- `scripts/setup-prod.sh` — full k3s + manifests + Argo CD + verification steps
+  (run with sudo on this machine).
+- `infra/k3s/gateway.yaml` updated (rabbitmq mgmt URL env), new
+  `infra/k3s/observability.yaml` (Prometheus/Grafana/pushgateway on hostNetwork,
+  dashboards as ConfigMaps), `infra/argo/comfyops-app.yaml` (GitOps app).
+- Gateway image builds clean (`comfyops-gateway:latest`, smoke-tested boot).
+
+---
+
 ## 9. Contact/identity
 
 - GitHub: praneshnikhar — all repos private where noted; comfyops is private.

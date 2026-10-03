@@ -1,0 +1,185 @@
+# Prometheus (M2/M3 observability) — scrapes gateway, worker (Mac LAN IP),
+# and pushgateway. HostNetwork so it can reach the Mac worker's LAN IP.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: comfyops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      hostNetwork: true
+      containers:
+        - name: prometheus
+          image: prom/prometheus:latest
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.retention.time=15d
+          ports:
+            - containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus/prometheus.yml
+              subPath: prometheus.yml
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: comfyops
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+    scrape_configs:
+      - job_name: comfyops-gateway
+        static_configs:
+          - targets: ["127.0.0.1:31000"]
+            labels: { component: gateway }
+      # Mac worker: replace 192.168.1.x with the Mac's LAN IP.
+      - job_name: comfyops-worker
+        static_configs:
+          - targets: ["192.168.1.50:9100"]
+            labels: { component: worker }
+      - job_name: pushgateway
+        honor_labels: true
+        static_configs:
+          - targets: ["127.0.0.1:9091"]
+            labels: { component: gate }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: comfyops
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - port: 9090
+      targetPort: 9090
+      nodePort: 30090
+  type: NodePort
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pushgateway
+  namespace: comfyops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pushgateway
+  template:
+    metadata:
+      labels:
+        app: pushgateway
+    spec:
+      hostNetwork: true
+      containers:
+        - name: pushgateway
+          image: prom/pushgateway:latest
+          ports:
+            - containerPort: 9091
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: comfyops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      hostNetwork: true
+      containers:
+        - name: grafana
+          image: grafana/grafana:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: admin
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: comfyops
+          volumeMounts:
+            - name: provisioning
+              mountPath: /etc/grafana/provisioning
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+      volumes:
+        - name: provisioning
+          configMap:
+            name: grafana-provisioning
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-provisioning
+  namespace: comfyops
+data:
+  datasources.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        uid: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://127.0.0.1:30090
+        isDefault: true
+  dashboards.yml: |
+    apiVersion: 1
+    providers:
+      - name: comfyops
+        orgId: 1
+        folder: ComfyOps
+        type: file
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: comfyops
+data:
+  comfyops-v1.json: |
+    {"uid":"comfyops-v1","title":"ComfyOps v1 — Queue & Generation","tags":["comfyops"],"timezone":"browser","schemaVersion":39,"version":1,"refresh":"10s","time":{"from":"now-1h","to":"now"},"templating":{"list":[]},"annotations":{"list":[]},"panels":[
+      {"id":1,"type":"stat","title":"Queue depth (RabbitMQ)","datasource":{"type":"prometheus","uid":"Prometheus"},"gridPos":{"h":6,"w":4,"x":0,"y":0},"targets":[{"expr":"comfyops_rabbitmq_queue_depth","legendFormat":"messages"}],"fieldConfig":{"defaults":{"unit":"short","color":{"mode":"thresholds"},"thresholds":{"mode":"absolute","steps":[{"color":"green","value":null},{"color":"yellow","value":3},{"color":"red","value":10}]}}}},
+      {"id":2,"type":"timeseries","title":"Queue depth over time","datasource":{"type":"prometheus","uid":"Prometheus"},"gridPos":{"h":6,"w":8,"x":4,"y":0},"targets":[{"expr":"comfyops_rabbitmq_queue_depth","legendFormat":"messages"}],"fieldConfig":{"defaults":{"unit":"short"}}},
+      {"id":3,"type":"timeseries","title":"Job latency (enqueue → complete), p50 / p95","datasource":{"type":"prometheus","uid":"Prometheus"},"gridPos":{"h":8,"w":12,"x":0,"y":6},"targets":[{"expr":"histogram_quantile(0.95, sum(rate(comfyops_job_latency_seconds_bucket[5m])) by (le))","legendFormat":"p95"},{"expr":"histogram_quantile(0.50, sum(rate(comfyops_job_latency_seconds_bucket[5m])) by (le))","legendFormat":"p50"}],"fieldConfig":{"defaults":{"unit":"s"}}},
+      {"id":4,"type":"timeseries","title":"Generation time (ComfyUI), p50 / p95","datasource":{"type":"prometheus","uid":"Prometheus"},"gridPos":{"h":8,"w":12,"x":12,"y":6},"targets":[{"expr":"histogram_quantile(0.95, sum(rate(comfyops_generation_time_seconds_bucket[5m])) by (le))","legendFormat":"p95"},{"expr":"histogram_quantile(0.50, sum(rate(comfyops_generation_time_seconds_bucket[5m])) by (le))","legendFormat":"p50"}],"fieldConfig":{"defaults":{"unit":"s"}}},
+      {"id":5,"type":"timeseries","title":"Job throughput (per 5m)","datasource":{"type":"prometheus","uid":"Prometheus"},"gridPos":{"h":8,"w":8,"x":0,"y":14},"targets":[{"expr":"sum by (status) (rate(comfyops_jobs_total[5m]))","legendFormat":"{{status}}"}],"fieldConfig":{"defaults":{"unit":"ops"}}},
+      {"id":6,"type":"stat","title":"Jobs total (lifetime)","datasource":{"type":"prometheus","uid":"Prometheus"},"gridPos":{"h":4,"w":4,"x":8,"y":14},"targets":[{"expr":"sum(comfyops_jobs_total)","legendFormat":"jobs"}],"fieldConfig":{"defaults":{"unit":"short"}}},
+      {"id":7,"type":"stat","title":"Failures (lifetime)","datasource":{"type":"prometheus","uid":"Prometheus"},"gridPos":{"h":4,"w":4,"x":12,"y":14},"targets":[{"expr":"sum(comfyops_jobs_total{status=~\"failed\"})","legendFormat":"failed"}],"fieldConfig":{"defaults":{"unit":"short","color":{"mode":"thresholds"},"thresholds":{"mode":"absolute","steps":[{"color":"green","value":null},{"color":"red","value":1}]}}}}
+    ]}
+  comfyops-v2.json: |
+    {"uid":"comfyops-v2","title":"ComfyOps v2 — Quality Trends","tags":["comfyops","quality"],"timezone":"browser","schemaVersion":39,"version":1,"refresh":"30s","time":{"from":"now-6h","to":"now"},"templating":{"list":[{"name":"workflow","label":"Workflow","type":"query","datasource":{"type":"prometheus","uid":"Prometheus"},"query":"label_values(comfyops_gate_verdict, workflow)","current":{"text":"txt2img-sd15","value":"txt2img-sd15"}}]},"annotations":{"list":[]},"panels":[
+      {"id":1,"type":"timeseries","title":"CLIP mean per version","datasource":{"type":"prometheus","uid":"Prometheus"},"gridPos":{"h":8,"w":12,"x":0,"y":0},"targets":[{"expr":"comfyops_gate_metric{workflow=\"$workflow\",metric=\"clip_mean\"}","legendFormat":"{{version}}"}],"fieldConfig":{"defaults":{"unit":"short"}}},
+      {"id":2,"type":"timeseries","title":"Aesthetic mean per version","datasource":{"type":"prometheus","uid":"Prometheus"},"gridPos":{"h":8,"w":12,"x":12,"y":0},"targets":[{"expr":"comfyops_gate_metric{workflow=\"$workflow\",metric=\"aesthetic_mean\"}","legendFormat":"{{version}}"}],"fieldConfig":{"defaults":{"unit":"short"}}},
+      {"id":3,"type":"timeseries","title":"Defect rate per version","datasource":{"type":"prometheus","uid":"Prometheus"},"gridPos":{"h":8,"w":8,"x":0,"y":8},"targets":[{"expr":"comfyops_gate_metric{workflow=\"$workflow\",metric=\"defect_rate\"}","legendFormat":"{{version}}"}],"fieldConfig":{"defaults":{"unit":"percentunit","min":0,"color":{"mode":"thresholds"},"thresholds":{"mode":"absolute","steps":[{"color":"green","value":null},{"color":"red","value":0.05}]}}}},
+      {"id":4,"type":"timeseries","title":"Generation time mean (s) per version","datasource":{"type":"prometheus","uid":"Prometheus"},"gridPos":{"h":8,"w":8,"x":8,"y":8},"targets":[{"expr":"comfyops_gate_metric{workflow=\"$workflow\",metric=\"gen_time_mean\"}","legendFormat":"{{version}}"}],"fieldConfig":{"defaults":{"unit":"s"}}},
+      {"id":5,"type":"timeseries","title":"Cost per image per version","datasource":{"type":"prometheus","uid":"Prometheus"},"gridPos":{"h":8,"w":8,"x":16,"y":8},"targets":[{"expr":"comfyops_gate_metric{workflow=\"$workflow\",metric=\"cost_per_image\"}","legendFormat":"{{version}}"}],"fieldConfig":{"defaults":{"unit":"currencyUSD"}}},
+      {"id":6,"type":"stat","title":"Gate verdicts (1 = PASS)","datasource":{"type":"prometheus","uid":"Prometheus"},"gridPos":{"h":4,"w":12,"x":0,"y":16},"targets":[{"expr":"comfyops_gate_verdict{workflow=\"$workflow\"}","legendFormat":"{{version}}"}],"fieldConfig":{"defaults":{"mappings":[{"type":"value","options":{"0":{"text":"BLOCKED","color":"red"},"1":{"text":"PASS","color":"green"}}}]}}}
+    ]}
