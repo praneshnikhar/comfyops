@@ -321,3 +321,64 @@ Ports the Asus must listen on: 5672 (AMQP), 9000 (S3), 31000 (gateway NodePort),
 - Final year solo project; hardware budget: MacBook M3 (8GB, generation worker) +
   Asus Vivobook i5-11th-gen Iris Xe (k3s control plane, CPU scoring).
 - Constraint: everything open source / self-hosted, ₹0 budget. No paid LLMs.
+---
+
+## 12. MAC VERIFICATION SESSION (2026-10-03, after pulling M3-M5) — CURRENT STATE
+
+What was verified on the Mac with the new (Asus-written) code, and what is still pending.
+
+### Done / verified on Mac
+- `git pull` — repo in sync at `2f29ddd` (M6 report draft), working tree clean
+- Dev stack restarted: Docker Desktop + rabbitmq/valkey/seaweedfs containers
+  (were stopped; `docker start final-year-project-*` — do NOT use `docker compose up`
+  blindly, it hung; images already present, no pull needed)
+- `.model_cache/` moved from `scoring/.model_cache/` → repo root (new code expects
+  root; scoring + gateway share it). `.gitignore` updated. NEVER commit it.
+- Gateway venv: installed `prometheus-client` (via requirements.txt) + `torch
+  torchvision open_clip_torch` (needed for REAL semantic-cache embeddings;
+  without them cache falls back to pseudo-embeddings)
+- Worker venv: installed `prometheus-client`
+- Gateway boots with new code: /health OK, /metrics has 33 comfyops_* metrics,
+  registry shows txt2img-sd15 1.1.0 (latest) with promote + canary endpoints
+- Promotion verified: `POST /workflows/txt2img-sd15/promote {"version":"1.0.0"}`
+  → promoted_version 1.0.0 (unversioned /generate now routes to 1.0.0)
+- Canary verified: `POST /workflows/txt2img-sd15/canary {"version":"1.1.0","weight":0.5}`
+  → canary set; a real /generate was routed to **1.1.0** (canary branch working)
+- Canary endpoint takes JSON body `{version, weight}` — NOT query params
+
+### Issues found (fix before next session)
+1. **Duplicate-worker trap (recurring):** an old worker (started 19:02) held
+   port 9100 (Prometheus metrics server) and the job; a second worker crashed
+   with `OSError: [Errno 48] Address already in use` on startup. ALWAYS:
+   `pkill -f "python worker.py"; sleep 2; pgrep -f "python worker.py" | wc -l` →
+   expect 0, then start ONE worker. (Handoff §5.5 same lesson.)
+2. **Stuck job `d577b0e2-ad94-4f2e-aa1f-4c9e891a7b4c`:** enqueued for the E2E
+   test; worker picked it up (routed to 1.1.0 via canary), ComfyUI ran the
+   workflow (queue emptied) but the job never completed → worker likely died
+   (metrics-bind crash or memory pressure). The RabbitMQ message was
+   consumed/nacked; job is stuck in "queued" forever. Re-run a fresh E2E after
+   fixing #1: one worker only, then POST /generate + poll /jobs/{id}.
+3. **ComfyUI cold start on 8GB:** after hours idle, first generation reloads
+   the model → ~10-12 min. The verification E2E was aborted by the user before
+   completion; a fresh run on warm model takes ~75-90s.
+
+### NOT yet verified on Mac (do these next session, in order)
+1. **Fresh E2E job** with exactly one worker → job goes queued → done + image URL
+   (use warm ComfyUI or be patient with cold start)
+2. **Semantic cache real path:** with open_clip now in the gateway venv, send
+   "a red apple" then "an apple that is red" → second must return cached:true
+   instantly (threshold 0.92). Also check Valkey keys `comfyops:cache:v1.0.0*`.
+3. **Gate v2 quick run (mock):** `COMFYOPS_MOCK_SCORE=1 .venv/bin/python gate.py
+   txt2img-sd15 1.1.0` — verifies bootstrap CIs + verdict without GPU. Champion
+   state is at scoring/.gate_state (20x5 real data from Asus session).
+4. **Blame smoke (mock):** `scoring/blame.py txt2img-sd15 1.0.0 1.1.0` →
+   expect KSampler BLAMED (matches Asus result)
+5. **Discovery smoke:** `scoring/discovery.py` (mock mode) → adversarial prompts
+6. **Review the M6 report draft:** `docs/report.md` — NOT yet reviewed on Mac
+
+### Still pending overall (project-level)
+- **Asus:** RUN `scripts/setup-prod.sh` (sudo) — actual k3s install + manifests +
+  Argo CD + observability. Gateway image already built + smoke-tested.
+  Then prod verification: gate run against the cluster, Grafana live at :3000.
+- **M6:** finalize report with prod numbers, README polish, 15-min viva demo
+  script dry-run, optional vLLM vs MLX vs llama.cpp benchmark appendix.
