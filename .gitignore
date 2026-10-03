@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Env / secrets
+.env
+*.env
+config.local.yaml
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Models & outputs (downloaded, not committed)
+*.safetensors
+*.ckpt
+*.gguf
+outputs/
+images/

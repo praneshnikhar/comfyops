@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+pika
+minio
+redis
+numpy
+pydantic
+pydantic-settings
