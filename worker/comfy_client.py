@@ -28,7 +28,7 @@ class ComfyClient:
         resp = requests.post(
             f"{self.base_url}/prompt",
             json={"prompt": workflow, "client_id": client_id},
-            timeout=10,
+            timeout=60,
         )
         resp.raise_for_status()
         prompt_id = resp.json().get("prompt_id")

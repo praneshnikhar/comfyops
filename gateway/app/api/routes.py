@@ -4,7 +4,7 @@ import time
 from fastapi import APIRouter, HTTPException, Response
 from minio import Minio
 
-from app.core import jobs
+from app.core import jobs, registry
 from app.core.config import settings
 from app.core.rabbit import JobPublisher
 from app.models.schemas import GenerateRequest, GenerateResponse, JobStatusResponse
@@ -36,16 +36,39 @@ def health():
     return {"status": "ok", "service": "comfyops-gateway"}
 
 
+@router.get("/workflows")
+def list_workflows():
+    return [{"name": m["name"], "version": m["version"], "valid": m["valid"],
+             "errors": m["errors"], "versions": m["versions"]}
+            for m in registry.load_registry().values()]
+
+
+@router.get("/workflows/{name}")
+def get_workflow(name: str):
+    reg = registry.load_registry()
+    if name not in reg:
+        raise HTTPException(404, "workflow not found")
+    return reg[name]
+
+
 @router.post("/generate", response_model=GenerateResponse)
 def generate(req: GenerateRequest):
-    """Enqueue a generation job. (M5: semantic cache lookup goes here.)"""
-    job = jobs.create_job(workflow_id=req.workflow_id, prompt=req.prompt, seed=req.seed)
+    """Resolve workflow, inject prompt/seed, enqueue. (M5: semantic cache here.)"""
+    try:
+        workflow_json, version = registry.resolve(req.workflow_id, req.version)
+        workflow_json = registry.instantiate(workflow_json, req.prompt, req.seed or 0)
+    except (KeyError, ValueError) as e:
+        raise HTTPException(400, str(e))
+    job = jobs.create_job(
+        workflow_id=f"{req.workflow_id}@{version}", prompt=req.prompt, seed=req.seed
+    )
     publisher.publish(
         {
             "id": job["id"],
             "workflow_id": job["workflow_id"],
             "prompt": job["prompt"],
             "seed": job["seed"],
+            "workflow_json": workflow_json,
         }
     )
     return GenerateResponse(job_id=job["id"], status="queued")

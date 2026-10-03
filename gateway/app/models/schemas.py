@@ -2,7 +2,8 @@ from pydantic import BaseModel
 
 
 class GenerateRequest(BaseModel):
-    workflow_id: str = "default"
+    workflow_id: str = "txt2img-sd15"
+    version: str | None = None
     prompt: str
     seed: int | None = None
 
