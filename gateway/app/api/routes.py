@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Response
 from minio import Minio
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
-from app.core import jobs, metrics, promotion, registry
+from app.core import cache, jobs, metrics, promotion, registry
 from app.core.config import settings
 from app.core.rabbit import JobPublisher
 from app.models.schemas import GenerateRequest, GenerateResponse, JobStatusResponse
@@ -82,6 +82,17 @@ def generate(req: GenerateRequest):
             raise HTTPException(400, str(e))
         if canary_version:
             metrics.CANARY_REQUESTS.labels(workflow=req.workflow_id, version=version).inc()
+
+    hit = cache.lookup(req.prompt, version)
+    if hit:
+        job = jobs.create_job(
+            workflow_id=f"{req.workflow_id}@{version}", prompt=req.prompt,
+            seed=req.seed, cached=True, image_url=hit,
+        )
+        metrics.record_job("done")
+        metrics.CACHE_HITS.inc()
+        return GenerateResponse(job_id=job["id"], status="done", version=version, cached=True, image_url=hit)
+    metrics.CACHE_MISSES.inc()
     job = jobs.create_job(
         workflow_id=f"{req.workflow_id}@{version}", prompt=req.prompt, seed=req.seed
     )
@@ -113,6 +124,7 @@ def promote(name: str, body: dict):
     if name not in reg or version not in reg[name]["versions"]:
         raise HTTPException(404, f"workflow '{name}' has no version {version}")
     promotion.set_promoted(name, version)
+    cache.invalidate(version)
     return promotion.get_state(name)
 
 
@@ -169,6 +181,11 @@ def job_complete(
     if not job:
         raise HTTPException(404, "job not found")
     jobs.mark_done(job_id, image_url, generation_time)
+    try:
+        version = job["workflow_id"].split("@")[-1]
+        cache.store(job["prompt"], version, image_url)
+    except Exception:
+        pass
     metrics.record_job("done")
     metrics.record_completion(job["created_at"], generation_time)
     return {"status": "ok"}

@@ -13,6 +13,8 @@ class GenerateResponse(BaseModel):
     job_id: str
     status: str
     version: str | None = None
+    cached: bool = False
+    image_url: str | None = None
 
 
 class JobStatusResponse(BaseModel):

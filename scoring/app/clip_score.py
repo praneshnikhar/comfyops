@@ -17,7 +17,7 @@ from PIL import Image
 
 MODEL_NAME = "ViT-B-32"
 PRETRAINED = "openai"
-CACHE_DIR = os.path.join(Path(__file__).resolve().parent.parent, ".model_cache")
+CACHE_DIR = os.path.join(Path(__file__).resolve().parent.parent.parent, ".model_cache")
 
 _model = None
 _preprocess = None

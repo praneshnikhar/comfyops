@@ -41,6 +41,12 @@ CANARY_REQUESTS = Counter(
     "Unversioned /generate requests routed to a canary version.",
     ["workflow", "version"],
 )
+CACHE_HITS = Counter("comfyops_cache_hits_total", "Semantic cache hits served.")
+CACHE_MISSES = Counter("comfyops_cache_misses_total", "Semantic cache misses (generated).")
+CACHE_AUDIT = Counter(
+    "comfyops_cache_audit_samples_total",
+    "Cache hits sampled for audit.",
+)
 
 
 def record_job(status: str) -> None:

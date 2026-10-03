@@ -16,7 +16,7 @@ from PIL import Image
 
 MODEL_NAME = "ViT-B-32"
 PRETRAINED = "openai"
-CACHE_DIR = os.path.join(Path(__file__).resolve().parent.parent, ".model_cache")
+CACHE_DIR = os.path.join(Path(__file__).resolve().parent.parent.parent, ".model_cache")
 WEIGHTS_URL = "https://github.com/LAION-AI/aesthetic-predictor/raw/main/sa_0_4_vit_b_32_linear.pth"
 WEIGHTS_PATH = os.path.join(CACHE_DIR, "sa_0_4_vit_b_32_linear.pth")
 

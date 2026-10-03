@@ -23,5 +23,5 @@ config.local.yaml
 *.ckpt
 *.gguf
 outputs/
-scoring/.model_cache/
+.model_cache/
 scoring/.gate_state/
