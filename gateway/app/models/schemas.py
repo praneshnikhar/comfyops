@@ -6,6 +6,7 @@ class GenerateRequest(BaseModel):
     version: str | None = None
     prompt: str
     seed: int | None = None
+    workflow_json: dict | None = None
 
 
 class GenerateResponse(BaseModel):

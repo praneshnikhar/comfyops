@@ -92,9 +92,18 @@ def fetch_image(url: str, dest: Path) -> Path:
     return dest
 
 
+def load_adversarial() -> list[str]:
+    """Prompts discovered by discovery.py; merged into every gate run (M4)."""
+    p = Path(__file__).parent / "adversarial_prompts.txt"
+    if p.exists():
+        return [line.strip() for line in p.read_text().splitlines() if line.strip()]
+    return []
+
+
 def run_suite(workflow_id: str, version: str | None) -> list[dict]:
     """Batch-enqueue every (prompt, seed), then collect as jobs finish."""
-    jobs = [(p, s, enqueue(workflow_id, version, p, s)) for p in PROMPTS[:N_PROMPTS] for s in SEEDS[:N_SEEDS]]
+    prompts = PROMPTS[:N_PROMPTS] + load_adversarial()
+    jobs = [(p, s, enqueue(workflow_id, version, p, s)) for p in prompts for s in SEEDS[:N_SEEDS]]
     results = []
     for prompt, seed, job_id in jobs:
         job = wait_result(job_id)
@@ -272,7 +281,7 @@ def main() -> None:
         results = run_suite(args.workflow_id, args.version)
         agg = aggregate(results)
         mlflow.log_metrics({f"mean_{k}": v for k, v in agg.items() if isinstance(v, float)})
-        mlflow.log_metrics({f"per_image/{r['prompt'][:30]}_{r['seed']}": r["clip_score"] for r in results})
+        mlflow.log_metrics({f"per_image/{r['prompt'][:30].replace(',', '_').replace(' ', '_')}_{r['seed']}": r["clip_score"] for r in results})
 
         champion = load_champion(args.workflow_id)
         if args.seed_champion or champion is None:

@@ -26,12 +26,17 @@ def _hash(*parts: str) -> float:
 
 
 def _mock_score(image_path: str, prompt: str, version: str | None) -> dict:
-    """Deterministic synthetic scores calibrated to real M2 numbers."""
+    """Deterministic synthetic scores calibrated to real M2 numbers.
+
+    Noise is keyed on the prompt ONLY so identical (prompt, version) pairs
+    score identically across runs — reruns of the same version must compare
+    as equal, and the version signal must be the ONLY source of difference.
+    """
     clip = 0.28 + 0.06 * _hash(prompt)
     aesthetic = 5.8 + 0.8 * _hash("a", prompt)
-    noise_c = 0.01 * _hash("c", prompt, os.path.basename(image_path))
-    noise_a = 0.15 * _hash("n", prompt, os.path.basename(image_path))
-    gen_time = 82.0 + 10.0 * _hash("t", prompt, os.path.basename(image_path))
+    noise_c = 0.01 * _hash("c", prompt)
+    noise_a = 0.15 * _hash("n", prompt)
+    gen_time = 82.0 + 10.0 * _hash("t", prompt)
     if version == "1.1.0":  # the known-bad challenger (matches real M2 results)
         clip += 0.001
         aesthetic -= 0.22

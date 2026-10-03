@@ -62,21 +62,26 @@ def get_workflow(name: str):
 def generate(req: GenerateRequest):
     """Resolve workflow (promoted/champion or canary), inject prompt/seed, enqueue.
 
-    M5: semantic cache lookup happens before this (cache.py).
+    `workflow_json` overrides the registry entirely (blame analysis / ad-hoc
+    experiments publish custom graphs). M5: semantic cache lookup happens first.
     """
     reg = registry.load_registry()
-    if req.workflow_id not in reg:
-        raise HTTPException(404, f"unknown workflow '{req.workflow_id}'")
-    try:
-        version, canary_version = promotion.resolve_version(
-            req.workflow_id, req.version, reg[req.workflow_id]["version"]
-        )
-        workflow_json, version = registry.resolve(req.workflow_id, version)
-        workflow_json = registry.instantiate(workflow_json, req.prompt, req.seed or 0)
-    except (KeyError, ValueError) as e:
-        raise HTTPException(400, str(e))
-    if canary_version:
-        metrics.CANARY_REQUESTS.labels(workflow=req.workflow_id, version=version).inc()
+    if req.workflow_json is not None:
+        version = req.version or "custom"
+        workflow_json = registry.instantiate(req.workflow_json, req.prompt, req.seed or 0)
+    else:
+        if req.workflow_id not in reg:
+            raise HTTPException(404, f"unknown workflow '{req.workflow_id}'")
+        try:
+            version, canary_version = promotion.resolve_version(
+                req.workflow_id, req.version, reg[req.workflow_id]["version"]
+            )
+            workflow_json, version = registry.resolve(req.workflow_id, version)
+            workflow_json = registry.instantiate(workflow_json, req.prompt, req.seed or 0)
+        except (KeyError, ValueError) as e:
+            raise HTTPException(400, str(e))
+        if canary_version:
+            metrics.CANARY_REQUESTS.labels(workflow=req.workflow_id, version=version).inc()
     job = jobs.create_job(
         workflow_id=f"{req.workflow_id}@{version}", prompt=req.prompt, seed=req.seed
     )
