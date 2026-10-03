@@ -1,0 +1,30 @@
+# ComfyOps local dev environment (Mac, Docker Desktop)
+# Mirrors the Asus k3s services so the whole stack can be tested
+# before the Asus cluster exists. Prod uses infra/k3s manifests.
+#
+# Note: MinIO open-source is archived (Oct 2026) — S3-compatible storage
+# is SeaweedFS (Apache-2.0). rabbitmq/valkey use ECR/GHCR mirrors.
+services:
+  rabbitmq:
+    image: public.ecr.aws/docker/library/rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  valkey:
+    image: ghcr.io/valkey-io/valkey:8
+    ports:
+      - "6379:6379"
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    command: server -s3 -s3.port=9000 -s3.config=/etc/seaweedfs/s3.json -dir=/data -volume.max=10
+    ports:
+      - "9000:9000"
+      - "9333:9333"
+    volumes:
+      - seaweedfs-data:/data
+      - ./infra/seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+
+volumes:
+  seaweedfs-data:

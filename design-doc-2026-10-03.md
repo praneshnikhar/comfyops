@@ -158,7 +158,7 @@ BLOCKED release ──► changed_nodes = diff(workflow_v2, workflow_v1)
 | KEDA | Scale workers on queue depth | Apache-2.0 | |
 | Argo Workflows | Pipeline engine (quality gates, blame, discovery) | Apache-2.0 | |
 | Argo CD | GitOps deploys of platform + workflows | Apache-2.0 | |
-| MinIO | Object storage (images, workflows, models) | AGPL-3.0 | Self-hosted OK; fallback: SeaweedFS (Apache-2.0) |
+| MinIO → **SeaweedFS** | Object storage (images, workflows, models) | Apache-2.0 | **MinIO open-source archived Oct 2026** (Docker Hub/quay images gone) — SeaweedFS replaces it, same S3 API |
 | Valkey | Cache metadata + embeddings | BSD-3 | Redis fork (Redis license changed 2024) |
 | MLflow | Experiment tracking, registry | Apache-2.0 | |
 | Prometheus / Grafana | Metrics + dashboards | Apache-2.0 / AGPL-3.0 | Grafana free self-host |

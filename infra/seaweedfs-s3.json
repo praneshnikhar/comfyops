@@ -1,0 +1,11 @@
+{
+  "identities": [
+    {
+      "name": "comfyops",
+      "credentials": [
+        { "accessKey": "comfyops", "secretKey": "comfyops" }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

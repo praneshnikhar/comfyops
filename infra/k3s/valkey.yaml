@@ -1,0 +1,37 @@
+# Cache (Valkey, BSD-3 — the open Redis fork; Redis license changed in 2024).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valkey
+  namespace: comfyops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: valkey
+  template:
+    metadata:
+      labels:
+        app: valkey
+    spec:
+      containers:
+        - name: valkey
+          image: ghcr.io/valkey-io/valkey:8
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 100m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: valkey
+  namespace: comfyops
+spec:
+  selector:
+    app: valkey
+  ports:
+    - port: 6379
+      targetPort: 6379

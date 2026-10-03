@@ -1,0 +1,47 @@
+# Job queue (RabbitMQ, MPL-2.0) — image pulled from the ECR public mirror
+# because Docker Hub direct pulls are unreliable in some regions.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbitmq
+  namespace: comfyops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+    spec:
+      containers:
+        - name: rabbitmq
+          image: public.ecr.aws/docker/library/rabbitmq:3-management
+          ports:
+            - containerPort: 5672
+              name: amqp
+            - containerPort: 15672
+              name: mgmt
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 200m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  namespace: comfyops
+spec:
+  selector:
+    app: rabbitmq
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: 5672
+    - name: mgmt
+      port: 15672
+      targetPort: 15672
+      nodePort: 31567
+  type: NodePort
