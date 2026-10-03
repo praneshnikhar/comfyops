@@ -2,12 +2,12 @@
 
 Runs natively on macOS next to ComfyUI (MPS). Pulls jobs from the Asus
 control plane (RabbitMQ), runs the workflow in ComfyUI, uploads the
-result to MinIO. Push-based from the Asus perspective; pull-based from
+result to S3 (SeaweedFS). Push-based from the Asus perspective; pull-based from
 the Mac (no inbound ports needed).
 
 M1 flow:
   gateway -> RabbitMQ job -> worker -> ComfyUI -> image bytes
-  worker uploads to MinIO -> gateway serves result URL
+  worker uploads to S3 (SeaweedFS) -> gateway serves result URL
 
 Dev mode: RABBITMQ_URL/MINIO_ENDPOINT point at localhost Docker services
 on the Mac. Prod: point them at the Asus k3s cluster.
