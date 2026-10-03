@@ -36,6 +36,11 @@ QUEUE_DEPTH = Gauge(
     "Messages currently in the generation job queue (RabbitMQ).",
 )
 QUEUE_DEPTH.set(-1)
+CANARY_REQUESTS = Counter(
+    "comfyops_canary_requests_total",
+    "Unversioned /generate requests routed to a canary version.",
+    ["workflow", "version"],
+)
 
 
 def record_job(status: str) -> None:

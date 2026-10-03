@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Response
 from minio import Minio
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
-from app.core import jobs, metrics, registry
+from app.core import jobs, metrics, promotion, registry
 from app.core.config import settings
 from app.core.rabbit import JobPublisher
 from app.models.schemas import GenerateRequest, GenerateResponse, JobStatusResponse
@@ -60,12 +60,23 @@ def get_workflow(name: str):
 
 @router.post("/generate", response_model=GenerateResponse)
 def generate(req: GenerateRequest):
-    """Resolve workflow, inject prompt/seed, enqueue. (M5: semantic cache here.)"""
+    """Resolve workflow (promoted/champion or canary), inject prompt/seed, enqueue.
+
+    M5: semantic cache lookup happens before this (cache.py).
+    """
+    reg = registry.load_registry()
+    if req.workflow_id not in reg:
+        raise HTTPException(404, f"unknown workflow '{req.workflow_id}'")
     try:
-        workflow_json, version = registry.resolve(req.workflow_id, req.version)
+        version, canary_version = promotion.resolve_version(
+            req.workflow_id, req.version, reg[req.workflow_id]["version"]
+        )
+        workflow_json, version = registry.resolve(req.workflow_id, version)
         workflow_json = registry.instantiate(workflow_json, req.prompt, req.seed or 0)
     except (KeyError, ValueError) as e:
         raise HTTPException(400, str(e))
+    if canary_version:
+        metrics.CANARY_REQUESTS.labels(workflow=req.workflow_id, version=version).inc()
     job = jobs.create_job(
         workflow_id=f"{req.workflow_id}@{version}", prompt=req.prompt, seed=req.seed
     )
@@ -79,7 +90,50 @@ def generate(req: GenerateRequest):
         }
     )
     metrics.record_job("queued")
-    return GenerateResponse(job_id=job["id"], status="queued")
+    return GenerateResponse(job_id=job["id"], status="queued", version=version)
+
+
+@router.get("/workflows/{name}/promotion")
+def get_promotion(name: str):
+    return promotion.get_state(name)
+
+
+@router.post("/workflows/{name}/promote")
+def promote(name: str, body: dict):
+    """Promote a version to champion (call after the gate PASSES + manual approve)."""
+    version = body.get("version")
+    if not version:
+        raise HTTPException(400, "version required")
+    reg = registry.load_registry()
+    if name not in reg or version not in reg[name]["versions"]:
+        raise HTTPException(404, f"workflow '{name}' has no version {version}")
+    promotion.set_promoted(name, version)
+    return promotion.get_state(name)
+
+
+@router.get("/workflows/{name}/canary")
+def get_canary(name: str):
+    return promotion.get_state(name)["canary"]
+
+
+@router.post("/workflows/{name}/canary")
+def set_canary(name: str, body: dict):
+    """Route `weight` (0..1) of unversioned /generate traffic to a challenger."""
+    version = body.get("version")
+    weight = float(body.get("weight", 0.0))
+    if not version:
+        raise HTTPException(400, "version required")
+    reg = registry.load_registry()
+    if name not in reg or version not in reg[name]["versions"]:
+        raise HTTPException(404, f"workflow '{name}' has no version {version}")
+    promotion.set_canary(name, version, weight)
+    return promotion.get_state(name)
+
+
+@router.delete("/workflows/{name}/canary")
+def clear_canary(name: str):
+    promotion.clear_canary(name)
+    return promotion.get_state(name)
 
 
 @router.get("/jobs/{job_id}", response_model=JobStatusResponse)
@@ -109,7 +163,7 @@ def job_complete(
     job = jobs.get_job(job_id)
     if not job:
         raise HTTPException(404, "job not found")
-    jobs.mark_done(job_id, image_url)
+    jobs.mark_done(job_id, image_url, generation_time)
     metrics.record_job("done")
     metrics.record_completion(job["created_at"], generation_time)
     return {"status": "ok"}

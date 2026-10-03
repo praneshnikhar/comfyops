@@ -4,8 +4,14 @@ Submit a workflow (API-format JSON graph), wait for completion by polling
 /history, download the output images. Polling is used instead of the
 websocket so the worker has no extra dependency; streaming progress via
 websocket is a later improvement.
+
+COMFYOPS_MOCK_WORKER=1: return a tiny placeholder PNG without ComfyUI, so the
+whole pipeline (gateway -> queue -> worker -> S3 -> image -> gate) can be
+exercised and demoed on machines without the Mac GPU.
 """
 
+import base64
+import os
 import time
 import uuid
 
@@ -13,6 +19,13 @@ import requests
 
 POLL_INTERVAL = 0.5
 DEFAULT_TIMEOUT = 300  # seconds; SD1.5 @ 512x512 ~ 10-30s on MPS
+
+MOCK = os.getenv("COMFYOPS_MOCK_WORKER") == "1"
+
+# 1x1 transparent PNG
+_PLACEHOLDER_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+)
 
 
 class ComfyError(RuntimeError):
@@ -24,6 +37,9 @@ class ComfyClient:
         self.base_url = base_url
 
     def generate(self, workflow: dict, timeout: float = DEFAULT_TIMEOUT) -> list[bytes]:
+        if MOCK:
+            time.sleep(0.05)  # simulate a little work
+            return [_PLACEHOLDER_PNG]
         client_id = str(uuid.uuid4())
         resp = requests.post(
             f"{self.base_url}/prompt",

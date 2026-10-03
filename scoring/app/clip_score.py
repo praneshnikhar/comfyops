@@ -8,13 +8,16 @@ Rates how well a generated image matches its prompt:
 Model: open_clip ViT-B-32 (OpenAI), cached in .model_cache.
 """
 
+import os
+from pathlib import Path
+
 import open_clip
 import torch
 from PIL import Image
 
 MODEL_NAME = "ViT-B-32"
 PRETRAINED = "openai"
-CACHE_DIR = "/Users/pranesh/coding2/final-year-project/scoring/.model_cache"
+CACHE_DIR = os.path.join(Path(__file__).resolve().parent.parent, ".model_cache")
 
 _model = None
 _preprocess = None

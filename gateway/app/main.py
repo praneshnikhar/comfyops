@@ -5,12 +5,14 @@ from fastapi import FastAPI
 from app.api import routes
 from app.core import metrics
 from app.core.jobs import init_db
+from app.core.promotion import init_promotion
 from app.core.registry import load_registry
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    init_promotion()
     registry = load_registry()
     invalid = [k for k, v in registry.items() if not v["valid"]]
     if invalid:

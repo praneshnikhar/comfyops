@@ -11,6 +11,7 @@ class GenerateRequest(BaseModel):
 class GenerateResponse(BaseModel):
     job_id: str
     status: str
+    version: str | None = None
 
 
 class JobStatusResponse(BaseModel):
@@ -21,3 +22,4 @@ class JobStatusResponse(BaseModel):
     seed: int | None = None
     cached: bool = False
     image_url: str | None = None
+    generation_time: float | None = None

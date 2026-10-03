@@ -1,0 +1,128 @@
+{
+  "uid": "comfyops-v2",
+  "title": "ComfyOps v2 — Quality Trends",
+  "tags": ["comfyops", "quality"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "workflow",
+        "label": "Workflow",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "Prometheus" },
+        "query": "label_values(comfyops_gate_verdict, workflow)",
+        "current": { "text": "txt2img-sd15", "value": "txt2img-sd15" }
+      }
+    ]
+  },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "CLIP mean per version (last gate run each)",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "comfyops_gate_metric{workflow=\"$workflow\",metric=\"clip_mean\"}",
+          "legendFormat": "{{version}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Aesthetic mean per version",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "comfyops_gate_metric{workflow=\"$workflow\",metric=\"aesthetic_mean\"}",
+          "legendFormat": "{{version}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Defect rate per version",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "comfyops_gate_metric{workflow=\"$workflow\",metric=\"defect_rate\"}",
+          "legendFormat": "{{version}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Generation time mean (s) per version",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "targets": [
+        {
+          "expr": "comfyops_gate_metric{workflow=\"$workflow\",metric=\"gen_time_mean\"}",
+          "legendFormat": "{{version}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Cost per image per version",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "targets": [
+        {
+          "expr": "comfyops_gate_metric{workflow=\"$workflow\",metric=\"cost_per_image\"}",
+          "legendFormat": "{{version}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Gate verdicts (1 = PASS)",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "comfyops_gate_verdict{workflow=\"$workflow\"}",
+          "legendFormat": "{{version}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "BLOCKED", "color": "red" }, "1": { "text": "PASS", "color": "green" } } }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -33,11 +33,15 @@ def init_db() -> None:
                 status TEXT NOT NULL DEFAULT 'queued',
                 cached INTEGER NOT NULL DEFAULT 0,
                 image_url TEXT,
+                generation_time REAL,
                 created_at REAL NOT NULL,
                 finished_at REAL
             )
             """
         )
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(jobs)")]
+        if "generation_time" not in cols:
+            conn.execute("ALTER TABLE jobs ADD COLUMN generation_time REAL")
 
 
 def create_job(workflow_id: str, prompt: str, seed: int | None, cached: bool = False, image_url: str | None = None) -> dict:
@@ -56,11 +60,11 @@ def get_job(job_id: str) -> dict | None:
     return dict(row) if row else None
 
 
-def mark_done(job_id: str, image_url: str) -> None:
+def mark_done(job_id: str, image_url: str, generation_time: float | None = None) -> None:
     with _lock, _conn() as conn:
         conn.execute(
-            "UPDATE jobs SET status='done', image_url=?, finished_at=? WHERE id=?",
-            (image_url, time.time(), job_id),
+            "UPDATE jobs SET status='done', image_url=?, generation_time=?, finished_at=? WHERE id=?",
+            (image_url, generation_time, time.time(), job_id),
         )
 
 
@@ -73,4 +77,5 @@ def to_public(job: dict) -> dict:
         "seed": job["seed"],
         "cached": bool(job["cached"]),
         "image_url": job["image_url"],
+        "generation_time": job.get("generation_time"),
     }
