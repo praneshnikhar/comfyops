@@ -1,13 +1,34 @@
+import io
 import time
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
+from minio import Minio
 
 from app.core import jobs
+from app.core.config import settings
 from app.core.rabbit import JobPublisher
 from app.models.schemas import GenerateRequest, GenerateResponse, JobStatusResponse
 
 router = APIRouter()
 publisher = JobPublisher()
+
+_s3 = Minio(
+    settings.minio_endpoint,
+    settings.minio_access_key,
+    settings.minio_secret_key,
+    secure=False,
+)
+
+
+@router.get("/images/{job_id}/{filename}")
+def get_image(job_id: str, filename: str):
+    """Stream a generated image from object storage (auth handled here)."""
+    key = f"{job_id}/{filename}"
+    try:
+        resp = _s3.get_object(settings.minio_bucket, key)
+    except Exception:
+        raise HTTPException(404, "image not found")
+    return Response(content=resp.read(), media_type="image/png")
 
 
 @router.get("/health")

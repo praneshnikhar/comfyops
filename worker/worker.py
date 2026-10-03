@@ -19,6 +19,7 @@ import os
 import time
 
 import pika
+import requests
 from minio import Minio
 
 from comfy_client import ComfyClient
@@ -33,6 +34,7 @@ MINIO_ACCESS = os.getenv("COMFYOPS_MINIO_ACCESS", "comfyops")
 MINIO_SECRET = os.getenv("COMFYOPS_MINIO_SECRET", "comfyops")
 BUCKET = os.getenv("COMFYOPS_BUCKET", "comfyops-images")
 JOB_QUEUE = os.getenv("COMFYOPS_JOB_QUEUE", "generation-jobs")
+GATEWAY_URL = os.getenv("COMFYOPS_GATEWAY", "http://127.0.0.1:8000")
 
 
 def run_job(client: ComfyClient, job: dict) -> list[str]:
@@ -51,6 +53,16 @@ def run_job(client: ComfyClient, job: dict) -> list[str]:
         keys.append(obj.object_name)
         log.info("job %s image %d uploaded (%d bytes)", job["id"], i, size)
     return keys
+
+
+def complete_job(job: dict, keys: list[str]) -> None:
+    """Tell the gateway the job is done (worker -> gateway HTTP)."""
+    url = GATEWAY_URL.rstrip("/") + f"/jobs/{job['id']}/complete?image_url=" + GATEWAY_URL.rstrip("/") + f"/images/{job['id']}/{keys[0].split('/')[-1]}"
+    try:
+        requests.post(url, timeout=10).raise_for_status()
+        log.info("job %s completed via gateway", job["id"])
+    except Exception:
+        log.exception("job %s: could not notify gateway (image is in S3 anyway)", job["id"])
 
 
 minio_client = Minio(MINIO_ENDPOINT, MINIO_ACCESS, MINIO_SECRET, secure=False)
@@ -72,6 +84,7 @@ def main() -> None:
         try:
             keys = run_job(client, job)
             ch.basic_ack(delivery_tag=method.delivery_tag)
+            complete_job(job, keys)
             log.info("job %s done: %s", job["id"], keys)
         except Exception:
             log.exception("job %s failed", job["id"])

@@ -64,7 +64,7 @@ class ComfyClient:
                     "subfolder": img.get("subfolder", ""),
                     "type": img.get("type", "output"),
                 },
-                timeout=30,
+                timeout=120,  # generous: 8GB Mac under swap pressure is slow
             )
             r.raise_for_status()
             payloads.append(r.content)
